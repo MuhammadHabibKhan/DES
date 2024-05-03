@@ -3,10 +3,29 @@
 #include <string>
 #include <array>
 #include <bitset>
+#include <sstream>
 
 using namespace std;
 
 array<string, 16> KEY_POOL;
+array<string, 16> INV_KEY_POOL;
+
+string binaryXOR(const string& a, const string& b) 
+{
+    // Ensure both strings have the same length
+    if (a.length() != b.length()) {
+        cerr << "Binary strings must have the same length." << endl;
+        return "";
+    }
+    // Initialize result string
+    string result = "";
+
+    // Perform XOR operation on corresponding bits
+    for (size_t i = 0; i < a.length(); ++i) {
+        result += (a[i] == b[i]) ? '0' : '1';
+    }
+    return result;
+}
 
 class KeyExpansion
 {
@@ -145,6 +164,9 @@ class FeistelStructure
 {
     public:
 
+    string input_64_bit;
+    string IP;
+
     // Initial Permutation (IP) table for DES
     const int IP_Table[64] = 
     {
@@ -262,17 +284,159 @@ class FeistelStructure
         }
     };
 
+    FeistelStructure(string input)
+    {
+        for (int i = 0; i < input.length(); i++)
+        {
+            int asciiInput = static_cast<int>(input[i]);
+            this->input_64_bit += bitset<8>(asciiInput).to_string();
+        }
+        cout << "Original Input: " << input_64_bit << endl;
+    }
 
- 
+    void MapToIP()
+    {
+        for (int i = 0; i < 64; i++)
+        {
+            IP += input_64_bit[IP_Table[i] - 1];
+        }
+    }
 
-    FeistelStructure() {}
+    string MapToExpTable(string rb)
+    {
+        string expansion;
+
+        for (int i = 0; i < 48; i++)
+        {
+            expansion += rb[E_Table[i] - 1];
+        }
+        return expansion;
+    }
+
+    string AddKey(int round, bool flag, string exp)
+    {
+        string key;
+
+        if (flag == 0)
+        {
+            key = KEY_POOL[round];
+        }
+        else if (flag == 1)
+        {
+            key = INV_KEY_POOL[round];
+        }
+
+        return binaryXOR(key, exp);
+    }
+
+    string ComputeSBOX(string keyXOR)
+    {
+        string sBoxesOutput;
+
+        for (int i = 0; i < 8; i++)
+        {
+            string row_binary;
+            string col_binary;
+            string subString_6_bits = keyXOR.substr(i* 6, 6);
+
+            // first and last bit determines row
+            row_binary += subString_6_bits[0];
+            row_binary += subString_6_bits[5];
+            // middle 4 bits for col
+            col_binary = subString_6_bits.substr(1, 4);
+            // convert to decimal
+            unsigned long row_decimal = bitset<2>(row_binary).to_ulong();
+            unsigned long col_decimal = bitset<8>(col_binary).to_ulong();
+
+            int sBoxOutputDecimal = S_Boxes[i][row_decimal][col_decimal];
+            string sBoxOutput = bitset<4>(sBoxOutputDecimal).to_string();
+            sBoxesOutput += sBoxOutput; // add 4-bit SBox output to the combined result var
+        }
+        return sBoxesOutput;
+    }
+
+    string MapToPermTable(string sBoxesOutput)
+    {
+        string permutedBits;
+
+        for (int i = 0; i < 32; i++)
+        {
+            permutedBits += sBoxesOutput[P_Table[i] - 1];
+        }
+        return permutedBits;
+    }
+
+    string MapToInvIP(string mergedBits)
+    {
+        string invIP;
+
+        for (int i = 0; i < 64; i++)
+        {
+            invIP += mergedBits[Inv_IP_Table[i] - 1];
+        }
+        return invIP;
+    }
+
+    void algorithm(bool flag)
+    {
+        // flag => 0 for encryption | 1 for decryption
+
+        MapToIP();
+
+        // initial split
+        string leftBits;
+        string rightBits;
+
+        for (int i = 0; i < 64; i++)
+        {
+            if (i < 32)
+            {
+                leftBits += IP[i];
+            }
+            else
+            {
+                rightBits += IP[i];
+            }
+        }        
+
+        for (int round = 0; round < 16; round++)
+        {
+            // cout << "Round " << round << " Right Bits: " << rightBits << endl;
+            // cout << "Round " << round << " Left Bits: " << leftBits << endl;
+
+            string expansion = MapToExpTable(rightBits);
+            string keyXOR = AddKey(round, flag, expansion);
+            string sBoxesOutput = ComputeSBOX(keyXOR);
+            string permutedBits = MapToPermTable(sBoxesOutput);
+
+            string newRightBits = binaryXOR(permutedBits, leftBits);
+            leftBits = rightBits; // swap first
+            rightBits = newRightBits;
+        }
+
+        // append into main string right bits to swap
+        string mergedBits;
+        mergedBits += rightBits;
+        mergedBits += leftBits;
+
+        string cipherTextBinary = MapToInvIP(mergedBits);
+        bitset<64> set(cipherTextBinary);
+        stringstream res;
+        res << hex << uppercase << set.to_ullong();
+        cout << "Cipher Text Hex: " << res.str();
+    }
+
 };
 
 class DES
 {
-    public: string plainText; string key;
+    public:
 
-    // vector<array<string, 8>> INPUT_PACKETS_BITS;
+    string key;
+    string plainText;
+    string cipherText;
+    string decryptedText;
+
     vector<string> INPUT_PACKET_BITS;
 
     DES() {}
@@ -299,7 +463,6 @@ class DES
 
         while (plainTextIndex < plainText.length())
         {
-            // array<string, 8> packet;
             string packet;
 
             for (int i = 0; i < 8; i++)
@@ -307,19 +470,29 @@ class DES
                 if (plainTextIndex < plainText.length())
                 {
                     int asciiPT = static_cast<int>(plainText[plainTextIndex++]);
-                    // packet[i] = bitset<8>(asciiPT).to_string();
                     packet += bitset<8>(asciiPT).to_string();
                 }
                 else
                 {
                     int asciiPad = static_cast<int>(' '); // using space as padding
-                    // packet[i] = bitset<8>(asciiPad).to_string();
                     packet += bitset<8>(asciiPad).to_string();
                 }
-                // cout << " | " << packet[i];
             }
-            // cout << endl;
             INPUT_PACKET_BITS.push_back(packet);
+        }
+    }
+
+    void GenerateKeys()
+    {
+        KeyExpansion Key(key);
+        Key.ExpandKey();
+
+        // populate the inverse key pool for decryption
+        int index = 15;
+        
+        for (int i = 0; i < 16; i++)
+        {
+            INV_KEY_POOL[i] = KEY_POOL[index--];
         }
     }
 
@@ -327,10 +500,13 @@ class DES
 
 int main()
 {
-    // DES algorithm("habibkhan", "hahahaha");
-    // algorithm.CreateInputPackets();
+    DES Cipher("habibkha", "habibkha");
+    Cipher.CreateInputPackets();
+    Cipher.GenerateKeys();
 
-    KeyExpansion Key("habibkha");
-    Key.ExpandKey();
+    // KeyExpansion Key("habibkha");
+    // Key.ExpandKey();
+    FeistelStructure Encrypt("habibkha");
+    Encrypt.algorithm(0);
 
 }
