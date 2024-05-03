@@ -164,6 +164,7 @@ class FeistelStructure
 {
     public:
 
+    bool enc_dec_flag;
     string input_64_bit;
     string IP;
 
@@ -284,12 +285,19 @@ class FeistelStructure
         }
     };
 
-    FeistelStructure(string input)
+    FeistelStructure(string input, bool flag)
     {
-        for (int i = 0; i < input.length(); i++)
+        if (flag == 0)
         {
-            int asciiInput = static_cast<int>(input[i]);
-            this->input_64_bit += bitset<8>(asciiInput).to_string();
+            for (int i = 0; i < input.length(); i++)
+            {
+                int asciiInput = static_cast<int>(input[i]);
+                this->input_64_bit += bitset<8>(asciiInput).to_string();
+            }
+        }
+        else if (flag == 1)
+        {
+            this->input_64_bit = input;
         }
         cout << "Original Input: " << input_64_bit << endl;
     }
@@ -377,7 +385,7 @@ class FeistelStructure
         return invIP;
     }
 
-    void algorithm(bool flag)
+    string algorithm(bool flag)
     {
         // flag => 0 for encryption | 1 for decryption
 
@@ -397,7 +405,7 @@ class FeistelStructure
             {
                 rightBits += IP[i];
             }
-        }        
+        }
 
         for (int round = 0; round < 16; round++)
         {
@@ -423,7 +431,9 @@ class FeistelStructure
         bitset<64> set(cipherTextBinary);
         stringstream res;
         res << hex << uppercase << set.to_ullong();
-        cout << "Cipher Text Hex: " << res.str();
+        cout << "Cipher Text Hex: " << res.str() << endl;
+
+        return cipherTextBinary;
     }
 
 };
@@ -506,7 +516,9 @@ int main()
 
     // KeyExpansion Key("habibkha");
     // Key.ExpandKey();
-    FeistelStructure Encrypt("habibkha");
-    Encrypt.algorithm(0);
+    FeistelStructure Encrypt("habibkha", 0);
+    string cipherText = Encrypt.algorithm(0);
+    FeistelStructure Decrypt(cipherText, 1);
+    Decrypt.algorithm(1);
 
 }
