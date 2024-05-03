@@ -27,6 +27,14 @@ string binaryXOR(const string& a, const string& b)
     return result;
 }
 
+string BinaryToHex(string binaryString)
+{
+    bitset<64> set(binaryString);
+    stringstream res;
+    res << hex << uppercase << set.to_ullong();
+    return res.str();
+}
+
 class KeyExpansion
 {
     public:
@@ -54,7 +62,7 @@ class KeyExpansion
             int asciiKey = static_cast<int>(k[i]);
             this->key += bitset<8>(asciiKey).to_string();
         }
-        cout << "Original Key: " << key << endl;
+        cout << "Original Key Hex: " << BinaryToHex(key) << endl;
     }
 
     // PC-1 table for key expansion in DES
@@ -287,19 +295,13 @@ class FeistelStructure
 
     FeistelStructure(string input, bool flag)
     {
+        this->enc_dec_flag = flag;
+        this->input_64_bit = input;
+
         if (flag == 0)
         {
-            for (int i = 0; i < input.length(); i++)
-            {
-                int asciiInput = static_cast<int>(input[i]);
-                this->input_64_bit += bitset<8>(asciiInput).to_string();
-            }
+            cout << "Plain Text Hex: " << BinaryToHex(input_64_bit) << endl;
         }
-        else if (flag == 1)
-        {
-            this->input_64_bit = input;
-        }
-        cout << "Original Input: " << input_64_bit << endl;
     }
 
     void MapToIP()
@@ -385,10 +387,8 @@ class FeistelStructure
         return invIP;
     }
 
-    string algorithm(bool flag)
+    string algorithm()
     {
-        // flag => 0 for encryption | 1 for decryption
-
         MapToIP();
 
         // initial split
@@ -409,11 +409,8 @@ class FeistelStructure
 
         for (int round = 0; round < 16; round++)
         {
-            // cout << "Round " << round << " Right Bits: " << rightBits << endl;
-            // cout << "Round " << round << " Left Bits: " << leftBits << endl;
-
             string expansion = MapToExpTable(rightBits);
-            string keyXOR = AddKey(round, flag, expansion);
+            string keyXOR = AddKey(round, enc_dec_flag, expansion);
             string sBoxesOutput = ComputeSBOX(keyXOR);
             string permutedBits = MapToPermTable(sBoxesOutput);
 
@@ -427,13 +424,8 @@ class FeistelStructure
         mergedBits += rightBits;
         mergedBits += leftBits;
 
-        string cipherTextBinary = MapToInvIP(mergedBits);
-        bitset<64> set(cipherTextBinary);
-        stringstream res;
-        res << hex << uppercase << set.to_ullong();
-        cout << "Cipher Text Hex: " << res.str() << endl;
-
-        return cipherTextBinary;
+        string outputBinary = MapToInvIP(mergedBits);
+        return outputBinary;
     }
 
 };
@@ -448,16 +440,20 @@ class DES
     string decryptedText;
 
     vector<string> INPUT_PACKET_BITS;
-
-    DES() {}
+    vector<string> ENCRYPTED_DATA;
+    vector<string> DECRYPTED_DATA;
 
     DES(string pt, string key)
     {
         this->plainText = pt;
+        cout << "\n-----------------------------" << endl;
+        cout << "Message: " << plainText << endl;
+        cout << "-----------------------------" << endl;
         
         if (key.length() == 8)
         {
             this->key = key;
+            cout << "\nOriginal Key Char: " << key << endl;
         }
         else
         {
@@ -506,19 +502,52 @@ class DES
         }
     }
 
+    void Encrypt()
+    {
+        for (int i = 0; i < INPUT_PACKET_BITS.size(); i++)
+        {
+            cout << "\n----- Packet " << i+1 << " Encryption -----\n" << endl;
+            FeistelStructure Encrypt(INPUT_PACKET_BITS[i], 0);
+            cipherText = Encrypt.algorithm();
+
+            string cipherTextHex = BinaryToHex(cipherText);
+            ENCRYPTED_DATA.push_back(cipherText);
+
+            cout << "Cipher Text Hex: " << cipherTextHex << endl;
+        }
+    }
+
+    void Decrypt()
+    {
+        for (int i = 0; i < ENCRYPTED_DATA.size(); i++)
+        {
+            cout << "\n----- Packet " << i+1 << " Decryption -----\n" << endl;
+            FeistelStructure Decrypt(ENCRYPTED_DATA[i], 1);
+            decryptedText = Decrypt.algorithm();
+            
+            string decryptedTextHex = BinaryToHex(decryptedText);
+            DECRYPTED_DATA.push_back(decryptedText);
+            cout << "Decrypted Text Hex: " << decryptedTextHex << endl;
+
+            cout << "Decrypted Text Char: ";
+            for (int j = 0; j < decryptedText.length(); j+=8)
+            {
+                unsigned long int decryptedDec = bitset<8>(decryptedText.substr(j, 8)).to_ulong();
+                char decryptedChar = char(decryptedDec);
+                cout << decryptedChar;
+            }
+            cout << endl;
+        }
+    }
+
 };
 
 int main()
 {
-    DES Cipher("habibkha", "habibkha");
+    DES Cipher("muhammadhabibkhan", "habibkha");
     Cipher.CreateInputPackets();
     Cipher.GenerateKeys();
-
-    // KeyExpansion Key("habibkha");
-    // Key.ExpandKey();
-    FeistelStructure Encrypt("habibkha", 0);
-    string cipherText = Encrypt.algorithm(0);
-    FeistelStructure Decrypt(cipherText, 1);
-    Decrypt.algorithm(1);
+    Cipher.Encrypt();
+    Cipher.Decrypt();
 
 }
